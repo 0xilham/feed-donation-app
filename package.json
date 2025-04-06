@@ -1,0 +1,33 @@
+{
+  "name": "feed-donate-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.4",
+    "@tanstack/react-query": "^5.71.10",
+    "dotenv": "^16.4.7",
+    "next": "15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hot-toast": "^2.5.2",
+    "viem": "^2.25.0",
+    "wagmi": "^2.14.16"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/bun": "latest",
+    "@types/node": "^20.17.30",
+    "@types/react": "19.1.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.2.4",
+    "tailwindcss": "^4",
+    "typescript": "^5.8.3"
+  }
+}
