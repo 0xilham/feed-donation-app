@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lightTheme, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 
-const config = createConfig({
+export const config = createConfig({
   chains: [teaSepolia],
   transports: {
     [teaSepolia.id]: http(),

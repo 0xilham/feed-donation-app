@@ -1,4 +1,4 @@
-// app/page.tsx (perbaikan final)
+// app/page.tsx (final version)
 "use client";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -6,6 +6,7 @@ import {
   useWriteContract,
   useReadContract,
   useWaitForTransactionReceipt,
+  useBlockNumber,
 } from "wagmi";
 import { CONTRACT_ADDRESS, KINDNESS_ABI } from "./contractConfig";
 import { parseEther } from "viem";
@@ -71,11 +72,23 @@ const handleContractError = (error: Error) => {
   }
 };
 
+type TransactionHistory = {
+  hash: string;
+  foodName: string;
+  amount: string;
+  timestamp: number;
+  message: string;
+};
+
 export default function Home() {
   const { address, isConnected } = useAccount();
   const [message, setMessage] = useState("");
   const [selectedFood, setSelectedFood] = useState(CAT_FOODS[0]);
   const [isMounted, setIsMounted] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [transactionHistory, setTransactionHistory] = useState<
+    TransactionHistory[]
+  >([]);
   const notificationShownRef = useRef({
     success: false,
     error: false,
@@ -83,8 +96,11 @@ export default function Home() {
   });
   const lastTxTimestampRef = useRef(0);
 
-  // Read balance
-  const { data: treats } = useReadContract({
+  // Watch for new blocks and refresh balance
+  const { data: blockNumber } = useBlockNumber({ watch: true });
+
+  // Read balance with auto-refresh
+  const { data: treats, refetch: refetchTreats } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: KINDNESS_ABI,
     functionName: "balanceOf",
@@ -109,7 +125,14 @@ export default function Home() {
     hash,
   });
 
-  // Handle notifications
+  // Auto-refresh balance when new block is mined
+  useEffect(() => {
+    if (isConnected) {
+      refetchTreats();
+    }
+  }, [blockNumber, isConnected, refetchTreats]);
+
+  // Handle notifications and update history
   useEffect(() => {
     const now = Date.now();
     const canShowNotification = now - lastTxTimestampRef.current > 15000; // 15 detik cooldown
@@ -152,6 +175,19 @@ export default function Home() {
             </span>,
             { duration: 15000 } // 15 detik
           );
+
+          // Add to transaction history
+          setTransactionHistory((prev) => [
+            {
+              hash: hash,
+              foodName: selectedFood.name,
+              amount: selectedFood.value,
+              timestamp: Date.now(),
+              message: message,
+            },
+            ...prev,
+          ]);
+
           setMessage("");
           notificationShownRef.current = {
             success: true,
@@ -159,6 +195,9 @@ export default function Home() {
             cancelled: false,
           };
           lastTxTimestampRef.current = now;
+
+          // Refresh balance after successful transaction
+          refetchTreats();
         }
       }
     }
@@ -171,15 +210,7 @@ export default function Home() {
         cancelled: false,
       };
     }
-  }, [
-    feedError,
-    confirmError,
-    isConfirmed,
-    hash,
-    isFeeding,
-    isConfirming,
-    selectedFood.name,
-  ]);
+  }, [feedError, confirmError, isConfirmed, hash, isFeeding, isConfirming, selectedFood.name, message, refetchTreats, selectedFood.value]);
 
   const handleFeedCat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,20 +360,82 @@ export default function Home() {
                 </button>
               </form>
 
-              {/* Treats balance card */}
-              <div className="mt-8 p-4 bg-gradient-to-r from-amber-50 to-pink-50 rounded-xl border border-amber-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-amber-700">
-                      Your Cat Treats
-                    </p>
-                    <p className="text-2xl font-bold text-amber-900 mt-1">
-                      {isConnected ? Number(treats || 0) : 0}{" "}
-                      <span className="text-amber-600">purrs</span>
-                    </p>
+              {/* Treats balance card with history */}
+              <div className="mt-8 space-y-4">
+                <div className="p-4 bg-gradient-to-r from-amber-50 to-pink-50 rounded-xl border border-amber-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-amber-700">
+                        Your Cat Treats
+                      </p>
+                      <p className="text-2xl font-bold text-amber-900 mt-1">
+                        {isConnected ? Number(treats || 0) : 0}{" "}
+                        <span className="text-amber-600">purrs</span>
+                      </p>
+                    </div>
+                    <div className="text-4xl">😻</div>
                   </div>
-                  <div className="text-4xl">😻</div>
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="mt-2 text-xs text-amber-600 hover:text-amber-800 underline"
+                  >
+                    {showHistory ? "Hide History" : "View History"}
+                  </button>
                 </div>
+
+                {/* Transaction History */}
+                {showHistory && (
+                  <div className="p-4 bg-white rounded-xl border border-gray-200 max-h-60 overflow-y-auto">
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">
+                      Transaction History
+                    </h3>
+                    {transactionHistory.length === 0 ? (
+                      <p className="text-xs text-gray-500">
+                        No transactions yet
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {transactionHistory.map((tx, index) => (
+                          <li
+                            key={index}
+                            className="text-xs border-b border-gray-100 pb-2"
+                          >
+                            <div className="flex justify-between">
+                              <span className="font-medium">{tx.foodName}</span>
+                              <span>{tx.amount} TEA</span>
+                            </div>
+                            <div className="text-gray-500 truncate">
+                              {tx.message}
+                            </div>
+                            <a
+                              href={`https://sepolia.tea.xyz/tx/${tx.hash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:underline text-xs"
+                            >
+                              View on explorer
+                            </a>
+                            <div className="text-gray-400 text-xs mt-1">
+                              {new Date(tx.timestamp).toLocaleString()}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-8 w-full py-3 px-6 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-1 flex-wrap">
+                <span className="text-sm font-medium text-gray-700">Built by 🐱</span>
+                <a
+                  href="https://github.com/0xilham"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-green-400 hover:underline"
+                >
+                  NekoCrypt
+                </a>
               </div>
             </>
           ) : (
