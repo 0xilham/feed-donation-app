@@ -210,7 +210,18 @@ export default function Home() {
         cancelled: false,
       };
     }
-  }, [feedError, confirmError, isConfirmed, hash, isFeeding, isConfirming, selectedFood.name, message, refetchTreats, selectedFood.value]);
+  }, [
+    feedError,
+    confirmError,
+    isConfirmed,
+    hash,
+    isFeeding,
+    isConfirming,
+    selectedFood.name,
+    message,
+    refetchTreats,
+    selectedFood.value,
+  ]);
 
   const handleFeedCat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -377,9 +388,9 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => setShowHistory(!showHistory)}
-                    className="mt-2 text-xs text-amber-600 hover:text-amber-800 underline"
+                    className="mt-2 text-xs text-amber-600 hover:text-amber-800 underline cursor-pointer"
                   >
-                    {showHistory ? "Hide History" : "View History"}
+                    {showHistory ? "Hide History" : "View History ⤵"}
                   </button>
                 </div>
 
@@ -427,7 +438,9 @@ export default function Home() {
               </div>
 
               <div className="mt-8 w-full py-3 px-6 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-1 flex-wrap">
-                <span className="text-sm font-medium text-gray-700">Built by 🐱</span>
+                <span className="text-sm font-medium text-gray-700">
+                  Built by 🐱
+                </span>
                 <a
                   href="https://github.com/0xilham"
                   target="_blank"
