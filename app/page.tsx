@@ -1,6 +1,5 @@
-// app/page.tsx (final version)
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   useAccount,
   useWriteContract,
@@ -13,7 +12,17 @@ import { parseEther } from "viem";
 import { toast } from "react-hot-toast";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
-const CAT_FOODS = [
+// Constants
+const NOTIFICATION_COOLDOWN = 15000; // 15 seconds
+
+type CatFood = {
+  name: string;
+  emoji: string;
+  value: string;
+  description: string;
+};
+
+const CAT_FOODS: CatFood[] = [
   {
     name: "Small Fish",
     emoji: "🐟",
@@ -52,26 +61,6 @@ const CAT_FOODS = [
   },
 ];
 
-// Custom error handler function
-const handleContractError = (error: Error) => {
-  const userRejectedErrors = [
-    "User rejected",
-    "User denied",
-    "Request rejected",
-  ];
-
-  if (userRejectedErrors.some((e) => error.message.includes(e))) {
-    toast("Transaction cancelled", {
-      icon: "⚠️",
-      duration: 15000, // 15 detik
-    });
-  } else {
-    toast.error(`Transaction failed: ${error.message}`, {
-      duration: 15000, // 15 detik
-    });
-  }
-};
-
 type TransactionHistory = {
   hash: string;
   foodName: string;
@@ -83,18 +72,21 @@ type TransactionHistory = {
 export default function Home() {
   const { address, isConnected } = useAccount();
   const [message, setMessage] = useState("");
-  const [selectedFood, setSelectedFood] = useState(CAT_FOODS[0]);
+  const [selectedFood, setSelectedFood] = useState<CatFood>(CAT_FOODS[0]);
   const [isMounted, setIsMounted] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [transactionHistory, setTransactionHistory] = useState<
     TransactionHistory[]
   >([]);
+
+  // Using refs to track transaction state
   const notificationShownRef = useRef({
     success: false,
     error: false,
     cancelled: false,
   });
   const lastTxTimestampRef = useRef(0);
+  const shouldShowCancellationRef = useRef(false);
 
   // Watch for new blocks and refresh balance
   const { data: blockNumber } = useBlockNumber({ watch: true });
@@ -125,6 +117,99 @@ export default function Home() {
     hash,
   });
 
+  // Check if transaction is in progress
+  const isTransactionInProgress = isFeeding || isConfirming;
+
+  // Custom error handler that respects shouldShowCancellationRef
+  const handleContractError = useCallback((error: Error) => {
+    const userRejectedErrors = [
+      "User rejected",
+      "User denied",
+      "Request rejected",
+    ];
+
+    if (userRejectedErrors.some((e) => error.message.includes(e))) {
+      if (shouldShowCancellationRef.current) {
+        toast("Transaction cancelled", {
+          icon: "⚠️",
+          duration: NOTIFICATION_COOLDOWN,
+        });
+        shouldShowCancellationRef.current = false;
+      }
+    } else {
+      toast.error(`Transaction failed: ${error.message}`, {
+        duration: NOTIFICATION_COOLDOWN,
+      });
+    }
+  }, []);
+
+  // Handle food selection
+  const handleSelectFood = useCallback(
+    (food: CatFood) => {
+      if (!isTransactionInProgress) {
+        setSelectedFood(food);
+        // Reset cancellation flag when selecting food
+        shouldShowCancellationRef.current = false;
+      }
+    },
+    [isTransactionInProgress]
+  );
+
+  // Memoized food buttons
+  const foodButtons = useMemo(
+    () =>
+      CAT_FOODS.map((food) => (
+        <button
+          key={food.name}
+          type="button"
+          onClick={() => handleSelectFood(food)}
+          disabled={isTransactionInProgress}
+          className={`p-3 rounded-lg border transition-all flex flex-col items-center ${
+            selectedFood.name === food.name
+              ? "border-amber-400 bg-amber-50 shadow-inner"
+              : "border-gray-200 hover:border-amber-300 cursor-pointer"
+          } ${isTransactionInProgress ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          <span className="text-2xl mb-1">{food.emoji}</span>
+          <span className="text-xs font-medium">{food.name}</span>
+          <span className="text-xs text-gray-500">{food.value} TEA</span>
+        </button>
+      )),
+    [selectedFood.name, isTransactionInProgress, handleSelectFood]
+  );
+
+  // Memoized transaction history list
+  const transactionHistoryList = useMemo(
+    () =>
+      transactionHistory.length === 0 ? (
+        <p className="text-xs text-gray-500">No transactions yet</p>
+      ) : (
+        <ul className="space-y-2">
+          {transactionHistory.map((tx, index) => (
+            <li key={index} className="text-xs border-b border-gray-100 pb-2">
+              <div className="flex justify-between">
+                <span className="font-medium">{tx.foodName}</span>
+                <span>{tx.amount} TEA</span>
+              </div>
+              <div className="text-gray-500 truncate">{tx.message}</div>
+              <a
+                href={`https://sepolia.tea.xyz/tx/${tx.hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline text-xs"
+              >
+                View on explorer
+              </a>
+              <div className="text-gray-400 text-xs mt-1">
+                {new Date(tx.timestamp).toLocaleString()}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ),
+    [transactionHistory]
+  );
+
   // Auto-refresh balance when new block is mined
   useEffect(() => {
     if (isConnected) {
@@ -132,73 +217,57 @@ export default function Home() {
     }
   }, [blockNumber, isConnected, refetchTreats]);
 
-  // Handle notifications and update history
+  // Handle transaction notifications
   useEffect(() => {
     const now = Date.now();
-    const canShowNotification = now - lastTxTimestampRef.current > 15000; // 15 detik cooldown
+    const canShowNotification =
+      now - lastTxTimestampRef.current > NOTIFICATION_COOLDOWN;
 
-    if (canShowNotification) {
-      if (feedError) {
-        if (!notificationShownRef.current.error) {
-          handleContractError(feedError);
-          notificationShownRef.current = {
-            success: false,
-            error: true,
-            cancelled: feedError.message.includes("User rejected"),
-          };
-          lastTxTimestampRef.current = now;
-        }
-      } else if (confirmError) {
-        if (!notificationShownRef.current.error) {
-          handleContractError(confirmError);
-          notificationShownRef.current = {
-            success: false,
-            error: true,
-            cancelled: confirmError.message.includes("User rejected"),
-          };
-          lastTxTimestampRef.current = now;
-        }
-      } else if (isConfirmed && hash) {
-        if (!notificationShownRef.current.success) {
-          toast.success(
-            <span>
-              {selectedFood.name} delivered successfully!{" "}
-              <a
-                href={`https://sepolia.tea.xyz/tx/${hash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline text-blue-600"
-              >
-                <br />
-                View Tx
-              </a>
-            </span>,
-            { duration: 15000 } // 15 detik
-          );
+    if (!canShowNotification) return;
 
-          // Add to transaction history
-          setTransactionHistory((prev) => [
-            {
-              hash: hash,
-              foodName: selectedFood.name,
-              amount: selectedFood.value,
-              timestamp: Date.now(),
-              message: message,
-            },
-            ...prev,
-          ]);
+    if (feedError) {
+      handleContractError(feedError);
+    } else if (confirmError) {
+      handleContractError(confirmError);
+    } else if (isConfirmed && hash) {
+      if (!notificationShownRef.current.success) {
+        toast.success(
+          <span>
+            {selectedFood.name} delivered successfully!{" "}
+            <a
+              href={`https://sepolia.tea.xyz/tx/${hash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-blue-600"
+            >
+              <br />
+              View Tx
+            </a>
+          </span>,
+          { duration: NOTIFICATION_COOLDOWN }
+        );
 
-          setMessage("");
-          notificationShownRef.current = {
-            success: true,
-            error: false,
-            cancelled: false,
-          };
-          lastTxTimestampRef.current = now;
+        setTransactionHistory((prev) => [
+          {
+            hash,
+            foodName: selectedFood.name,
+            amount: selectedFood.value,
+            timestamp: now,
+            message,
+          },
+          ...prev,
+        ]);
 
-          // Refresh balance after successful transaction
-          refetchTreats();
-        }
+        setMessage("");
+        notificationShownRef.current = {
+          success: true,
+          error: false,
+          cancelled: false,
+        };
+        lastTxTimestampRef.current = now;
+        shouldShowCancellationRef.current = false;
+
+        refetchTreats();
       }
     }
 
@@ -221,41 +290,55 @@ export default function Home() {
     message,
     refetchTreats,
     selectedFood.value,
+    handleContractError,
   ]);
 
-  const handleFeedCat = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFeedCat = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
 
-    if (!isConnected || !address) {
-      toast.error("Please connect your wallet first");
-      return;
-    }
+      if (!isConnected || !address) {
+        toast.error("Please connect your wallet first");
+        return;
+      }
 
-    if (!message.trim()) {
-      toast.error("Please leave a note for the cat");
-      return;
-    }
+      if (!message.trim()) {
+        toast.error("Please leave a note for the cat");
+        return;
+      }
 
-    try {
-      // Reset notification flags when new transaction starts
-      notificationShownRef.current = {
-        success: false,
-        error: false,
-        cancelled: false,
-      };
-      lastTxTimestampRef.current = 0;
+      try {
+        // Set flag that we should show cancellation if rejected
+        shouldShowCancellationRef.current = true;
 
-      await writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: KINDNESS_ABI,
-        functionName: "sendKindness",
-        args: [address, message],
-        value: parseEther(selectedFood.value),
-      });
-    } catch (error) {
-      handleContractError(error as Error);
-    }
-  };
+        // Reset notification flags
+        notificationShownRef.current = {
+          success: false,
+          error: false,
+          cancelled: false,
+        };
+        lastTxTimestampRef.current = 0;
+
+        await writeContract({
+          address: CONTRACT_ADDRESS,
+          abi: KINDNESS_ABI,
+          functionName: "sendKindness",
+          args: [address, message],
+          value: parseEther(selectedFood.value),
+        });
+      } catch (error) {
+        handleContractError(error as Error);
+      }
+    },
+    [
+      address,
+      isConnected,
+      message,
+      selectedFood.value,
+      writeContract,
+      handleContractError,
+    ]
+  );
 
   useEffect(() => {
     setIsMounted(true);
@@ -307,26 +390,7 @@ export default function Home() {
                   <label className="block text-sm font-medium text-gray-700">
                     Select Cat Food
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {CAT_FOODS.map((food) => (
-                      <button
-                        key={food.name}
-                        type="button"
-                        onClick={() => setSelectedFood(food)}
-                        className={`p-3 rounded-lg border transition-all flex flex-col items-center ${
-                          selectedFood.name === food.name
-                            ? "border-amber-400 bg-amber-50 shadow-inner"
-                            : "border-gray-200 hover:border-amber-300 cursor-pointer"
-                        }`}
-                      >
-                        <span className="text-2xl mb-1">{food.emoji}</span>
-                        <span className="text-xs font-medium">{food.name}</span>
-                        <span className="text-xs text-gray-500">
-                          {food.value} TEA
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  <div className="grid grid-cols-3 gap-2">{foodButtons}</div>
                   <p className="text-xs text-gray-500 mt-1">
                     {selectedFood.description}
                   </p>
@@ -380,7 +444,7 @@ export default function Home() {
                         Your Cat Treats
                       </p>
                       <p className="text-2xl font-bold text-amber-900 mt-1">
-                        {isConnected ? Number(treats || 0) : 0}{" "}
+                        {Number(treats || 0)}{" "}
                         <span className="text-amber-600">purrs</span>
                       </p>
                     </div>
@@ -400,39 +464,7 @@ export default function Home() {
                     <h3 className="text-sm font-medium text-gray-700 mb-2">
                       Transaction History
                     </h3>
-                    {transactionHistory.length === 0 ? (
-                      <p className="text-xs text-gray-500">
-                        No transactions yet
-                      </p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {transactionHistory.map((tx, index) => (
-                          <li
-                            key={index}
-                            className="text-xs border-b border-gray-100 pb-2"
-                          >
-                            <div className="flex justify-between">
-                              <span className="font-medium">{tx.foodName}</span>
-                              <span>{tx.amount} TEA</span>
-                            </div>
-                            <div className="text-gray-500 truncate">
-                              {tx.message}
-                            </div>
-                            <a
-                              href={`https://sepolia.tea.xyz/tx/${tx.hash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-500 hover:underline text-xs"
-                            >
-                              View on explorer
-                            </a>
-                            <div className="text-gray-400 text-xs mt-1">
-                              {new Date(tx.timestamp).toLocaleString()}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    {transactionHistoryList}
                   </div>
                 )}
               </div>
