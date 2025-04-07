@@ -144,7 +144,7 @@ export default function Home() {
           notificationShownRef.current = {
             success: false,
             error: true,
-            cancelled: feedError?.message?.includes("User rejected") ?? false,
+            cancelled: feedError.message.includes("User rejected"),
           };
           lastTxTimestampRef.current = now;
         }
@@ -154,7 +154,7 @@ export default function Home() {
           notificationShownRef.current = {
             success: false,
             error: true,
-            cancelled: confirmError?.message?.includes("User rejected") ?? false,
+            cancelled: confirmError.message.includes("User rejected"),
           };
           lastTxTimestampRef.current = now;
         }
