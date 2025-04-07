@@ -1,6 +1,6 @@
-// app/page.tsx
+// app/page.tsx (perbaikan final)
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useAccount,
   useWriteContract,
@@ -60,9 +60,14 @@ const handleContractError = (error: Error) => {
   ];
 
   if (userRejectedErrors.some((e) => error.message.includes(e))) {
-    toast("Transaction cancelled", { icon: "⚠️" });
+    toast("Transaction cancelled", {
+      icon: "⚠️",
+      duration: 15000, // 15 detik
+    });
   } else {
-    toast.error(`Transaction failed: ${error.message}`);
+    toast.error(`Transaction failed: ${error.message}`, {
+      duration: 15000, // 15 detik
+    });
   }
 };
 
@@ -71,6 +76,12 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [selectedFood, setSelectedFood] = useState(CAT_FOODS[0]);
   const [isMounted, setIsMounted] = useState(false);
+  const notificationShownRef = useRef({
+    success: false,
+    error: false,
+    cancelled: false,
+  });
+  const lastTxTimestampRef = useRef(0);
 
   // Read balance
   const { data: treats } = useReadContract({
@@ -100,26 +111,75 @@ export default function Home() {
 
   // Handle notifications
   useEffect(() => {
-    if (feedError) handleContractError(feedError);
-    if (confirmError) handleContractError(confirmError);
+    const now = Date.now();
+    const canShowNotification = now - lastTxTimestampRef.current > 15000; // 15 detik cooldown
 
-    if (isConfirmed && hash) {
-     toast.success(
-       <span>
-         {selectedFood.name} delivered successfully!{" "}
-         <a
-           href={`https://sepolia.tea.xyz/tx/${hash}`}
-           target="_blank"
-           rel="noopener noreferrer"
-           className="underline text-blue-600"
-         ><br/>
-           View Tx
-         </a>
-       </span>
-     );
-      setMessage("");
+    if (canShowNotification) {
+      if (feedError) {
+        if (!notificationShownRef.current.error) {
+          handleContractError(feedError);
+          notificationShownRef.current = {
+            success: false,
+            error: true,
+            cancelled: feedError.message.includes("User rejected"),
+          };
+          lastTxTimestampRef.current = now;
+        }
+      } else if (confirmError) {
+        if (!notificationShownRef.current.error) {
+          handleContractError(confirmError);
+          notificationShownRef.current = {
+            success: false,
+            error: true,
+            cancelled: confirmError.message.includes("User rejected"),
+          };
+          lastTxTimestampRef.current = now;
+        }
+      } else if (isConfirmed && hash) {
+        if (!notificationShownRef.current.success) {
+          toast.success(
+            <span>
+              {selectedFood.name} delivered successfully!{" "}
+              <a
+                href={`https://sepolia.tea.xyz/tx/${hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline text-blue-600"
+              >
+                <br />
+                View Tx
+              </a>
+            </span>,
+            { duration: 15000 } // 15 detik
+          );
+          setMessage("");
+          notificationShownRef.current = {
+            success: true,
+            error: false,
+            cancelled: false,
+          };
+          lastTxTimestampRef.current = now;
+        }
+      }
     }
-  }, [feedError, confirmError, isConfirmed, hash, selectedFood.name]);
+
+    // Reset notification flags when transaction state resets
+    if (!isFeeding && !isConfirming && !hash) {
+      notificationShownRef.current = {
+        success: false,
+        error: false,
+        cancelled: false,
+      };
+    }
+  }, [
+    feedError,
+    confirmError,
+    isConfirmed,
+    hash,
+    isFeeding,
+    isConfirming,
+    selectedFood.name,
+  ]);
 
   const handleFeedCat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,6 +195,14 @@ export default function Home() {
     }
 
     try {
+      // Reset notification flags when new transaction starts
+      notificationShownRef.current = {
+        success: false,
+        error: false,
+        cancelled: false,
+      };
+      lastTxTimestampRef.current = 0;
+
       await writeContract({
         address: CONTRACT_ADDRESS,
         abi: KINDNESS_ABI,

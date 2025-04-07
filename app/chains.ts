@@ -1,3 +1,4 @@
+// app/chains.ts
 import { Chain } from "viem";
 
 export const teaSepolia: Chain = {

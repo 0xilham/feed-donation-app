@@ -1,3 +1,4 @@
+// app/layout.tsx
 import { Toaster } from "react-hot-toast";
 import { Providers } from "./providers";
 import "./globals.css";
