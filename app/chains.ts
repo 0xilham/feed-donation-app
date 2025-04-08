@@ -10,11 +10,7 @@ export const teaSepolia: Chain = {
     symbol: "TEA",
   },
   rpcUrls: {
-    default: {
-      http: [
-        "https://tea-sepolia.g.alchemy.com/v2/L-44yy11gjQt3ZvowblQi2bvo9sp12D_",
-      ],
-    },
+    default: { http: ["https://tea-sepolia.g.alchemy.com/public"] },
   },
   blockExplorers: {
     default: {
