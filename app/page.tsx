@@ -61,6 +61,17 @@ const CAT_FOODS: CatFood[] = [
   },
 ];
 
+// Text suggestions for the message input
+const TEXT_SUGGESTIONS = [
+  "Meow! 😻",
+  "Enjoy this food! 🍽️",
+  "Purrfect! 🐾",
+  "For a lovely cat! 🐈",
+  "Happy feeding! 🥰",
+  "Happy Tea! 🍵",
+  "You're awesome! 😺",
+];
+
 type TransactionHistory = {
   hash: string;
   foodName: string;
@@ -119,6 +130,31 @@ export default function Home() {
 
   // Check if transaction is in progress
   const isTransactionInProgress = isFeeding || isConfirming;
+
+  // Handle text suggestion click
+  const handleSuggestionClick = useCallback((suggestion: string) => {
+    setMessage((prev) => (prev ? `${prev} ${suggestion}` : suggestion));
+  }, []);
+
+  // Memoized text suggestion buttons
+  const textSuggestionButtons = useMemo(
+    () => (
+      <div className="flex flex-wrap gap-2 mt-2">
+        {TEXT_SUGGESTIONS.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => handleSuggestionClick(suggestion)}
+            disabled={isTransactionInProgress}
+            className="text-xs px-3 py-1 bg-amber-100 hover:bg-amber-200 rounded-full transition-colors cursor-pointer"
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    ),
+    [isTransactionInProgress, handleSuggestionClick]
+  );
 
   // Custom error handler that respects shouldShowCancellationRef
   const handleContractError = useCallback((error: Error) => {
@@ -384,6 +420,10 @@ export default function Home() {
                     onChange={(e) => setMessage(e.target.value)}
                     required
                   />
+                  {/* Text suggestion buttons */}
+                  <div className="text-xs text-gray-500 mt-1">
+                    Quick note suggestions: {textSuggestionButtons}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
