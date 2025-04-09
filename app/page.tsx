@@ -133,7 +133,7 @@ export default function Home() {
 
   // Handle text suggestion click
   const handleSuggestionClick = useCallback((suggestion: string) => {
-    setMessage((prev) => (prev ? `${prev} ${suggestion}` : suggestion));
+    setMessage(suggestion);
   }, []);
 
   // Memoized text suggestion buttons
@@ -146,14 +146,18 @@ export default function Home() {
             type="button"
             onClick={() => handleSuggestionClick(suggestion)}
             disabled={isTransactionInProgress}
-            className="text-xs px-3 py-1 bg-amber-100 hover:bg-amber-200 rounded-full transition-colors cursor-pointer"
+            className={`text-xs px-3 py-1 rounded-full transition-colors cursor-pointer ${
+              message === suggestion
+                ? "bg-amber-400 text-white"
+                : "bg-amber-100 hover:bg-amber-200"
+            }`}
           >
             {suggestion}
           </button>
         ))}
       </div>
     ),
-    [isTransactionInProgress, handleSuggestionClick]
+    [isTransactionInProgress, handleSuggestionClick, message]
   );
 
   // Custom error handler that respects shouldShowCancellationRef
@@ -422,7 +426,7 @@ export default function Home() {
                   />
                   {/* Text suggestion buttons */}
                   <div className="text-xs text-gray-500 mt-1">
-                    Quick note suggestions: {textSuggestionButtons}
+                    Select quick note suggestions: {textSuggestionButtons}
                   </div>
                 </div>
 
